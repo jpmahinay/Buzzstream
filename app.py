@@ -275,7 +275,7 @@ def process_website(consumer_key, consumer_secret, website, project_id, start_da
         print("Warning: No website ID found.")
         return None
 
-    with ThreadPoolExecutor(max_workers=100) as executor:
+    with ThreadPoolExecutor(max_workers=30) as executor:
         future_website_details = executor.submit(fetch_website_details, consumer_key, consumer_secret, website.get('uri') or website.get('url'), project_id, start_date, end_date)
         future_links = executor.submit(fetch_links, consumer_key, consumer_secret, website_id, project_id)
 
@@ -375,7 +375,7 @@ def fetch_websites_data(consumer_key, consumer_secret, project_id, start_date, e
     all_websites = []
     offset = 0
     max_results = 200
-    with ThreadPoolExecutor(max_workers=100) as executor:
+    with ThreadPoolExecutor(max_workers=30) as executor:
         while True:
             paginated_url = f"{api_url}&max_results={max_results}&offset={offset}"
             try:
