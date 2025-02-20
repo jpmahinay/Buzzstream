@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Data Fetcher</title>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            text-align: center;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        form {
+            margin-top: 0px;
+        }
+        #projectID, #startDatePicker, #endDatePicker {
+            width: 340px;
+            height: 35px;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            width: 100px;
+            height: 40px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:disabled {
+            background-color: grey;
+            cursor: not-allowed;
+        }
+        button:hover:enabled {
+            background-color: #45a049;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-align: left;
+        }
+        .center-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .divider {
+            width: 80%;
+            height: 1px;
+            background-color: #ddd;
+            margin: 5px 0;
+        }
+        #websiteData {
+            width: 80%;
+            min-height: 200px;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        /* Removed #fieldSelection styles */
+
+    </style>
+</head>
+<body>
+    <h1>Project Data Fetcher</h1>
+    <p>Select a date range & project to proceed.</p>
+    <div class="center-content">
+        <div class="form-group">
+            <input type="text" id="startDatePicker" placeholder="Start Date">
+        </div>
+        <div class="form-group">
+            <input type="text" id="endDatePicker" placeholder="End Date">
+        </div>
+        <div class="form-group">
+            <select id="projectID" disabled>
+                <option>Loading projects...</option>
+            </select>
+        </div>
+        <!-- Removed fieldSelection div -->
+
+        <div class="divider"></div>
+        <div id="processingMessage" style="display: none;">Processing... Please wait.</div>
+        <div id="spinner" style="display: none;"></div>
+        <div>
+            <button id="submitButton" onclick="submitForm()" disabled>OK</button>
+        </div>
+    </div>
+    <textarea id="websiteData" placeholder="Website data will appear here"></textarea>
+    <br>
+    <button id="copyButton" onclick="copyToClipboard()" style="display:none;">Copy to Clipboard</button>
+
+    <script>
+        $(function() {
+            $("#startDatePicker, #endDatePicker").datepicker();
+            loadProjects();
+        });
+
+        function loadProjects() {
+            fetch('/projects')
+                .then(response => response.json())
+                .then(populateProjects)
+                .catch(handleProjectLoadError);
+        }
+
+        function populateProjects(projects) {
+            const projectSelect = document.getElementById('projectID');
+            projectSelect.innerHTML = '';
+            const projectsByPhase = {};
+
+            projects.forEach(project => {
+                const phase = project.cleanedName.split(' - ')[0];
+                if (!projectsByPhase[phase]) {
+                    projectsByPhase[phase] = [];
+                }
+                projectsByPhase[phase].push(project);
+            });
+
+            Object.keys(projectsByPhase).forEach(phase => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = `========= ${phase} ===================`;
+                projectsByPhase[phase].forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.cleanedName;
+                    optgroup.appendChild(option);
+                });
+                projectSelect.appendChild(optgroup);
+            });
+
+            projectSelect.disabled = false;
+            document.getElementById('submitButton').disabled = false;
+        }
+
+        function handleProjectLoadError(error) {
+            console.error('Project load error:', error);
+            alert('Error loading projects. Please try again.');
+        }
+
+        function submitForm() {
+            const projectDropdown = document.getElementById('projectID');
+            const selectedOption = projectDropdown.options[projectDropdown.selectedIndex];
+            const projectId = selectedOption.value;
+            const projectName = selectedOption.textContent;
+            const startDate = new Date(document.getElementById('startDatePicker').value).getTime();
+            const endDate = new Date(document.getElementById('endDatePicker').value).getTime();
+
+
+            const processingMessage = document.getElementById('processingMessage');
+            const spinner = document.getElementById('spinner');
+            const submitButton = document.getElementById('submitButton');
+            const websiteDataTextArea = document.getElementById('websiteData');
+
+            processingMessage.style.display = 'block';
+            spinner.style.display = 'block';
+            submitButton.disabled = true;
+            submitButton.style.display = 'none';
+            websiteDataTextArea.value = '';
+            document.getElementById('projectID').disabled = true;
+            document.getElementById('startDatePicker').disabled = true;
+            document.getElementById('endDatePicker').disabled = true;
+
+            fetch('/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    projectId, projectName, startDate, endDate
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success' && data.websites) {
+                    // Define the headers list (all fields)
+                    const headers = [
+                        'id', 'name', 'primaryDomain', 'associatedPeopleId',
+                        'chronicle', 'projectName', 'projectAddedDate',
+                        'relationshipStage', 'domainRating', 'sendoutType',
+                        'activeProjects', 'agingStatus', 'contactHunter',
+                        'leadSource', 'linkDev', 'sequenceStage', 'template',
+                        'wmDeclineReason', 'wmFeedback', 'linkId',
+                        'linkingFrom', 'linkingFromTLD', 'linkCreatedDate','lastCommunicationDate',
+                        'chronicleDate1st', 'emailDirection1st', 'hisID1st',
+                        'chronicleDate2nd', 'emailDirection2nd', 'hisID2nd',
+                        'chronicleDate3rd', 'emailDirection3rd', 'hisID3rd',
+                        'chronicleDate4th', 'emailDirection4th', 'hisID4th'
+                    ];
+                    const headersName = [
+                        'Website ID', 'Website Name', 'Website Domain', 'BuzzStream Person ID',
+                        'Website Note', 'Website Project', 'Website Date Added To Project',
+                        'Website Relationship Stage', 'Ahrefs Domain Rating', 'Website .Sendout Type',
+                        'Website Active Projects', 'Website Aging Status', 'Contact Hunter',
+                        'Lead Source', 'LinkDev', 'Sequence Stage', 'Template',
+                        'WM Decline Reason', 'Website WM Feedback (WM Decline)', 'BuzzStream Link ID',
+                        'Linking From', 'Linking From TLD', 'Link Date Added','Last Communication Date',
+                        '1st Chron Date', 'Email Direction', 'ID',
+                        '2nd Chron Date', 'Email Direction', 'ID',
+                        '3rd Chron Date', 'Email Direction', 'ID',
+                        '4th Chron Date', 'Email Direction', 'ID'
+                    ];
+
+                    let outputString = headersName.join('\t') + '\n';  //Headers names
+
+                    data.websites.forEach(website => {
+                      if (!website) return; // Skip if website is null or undefined
+                      const websiteData = headers.map(field => website[field] || ''); // Get values, default to empty
+                      outputString += websiteData.join('\t') + '\n';
+                    });
+                    websiteDataTextArea.value = outputString;
+                    alert('Project processed successfully! Data Displayed');
+                    document.getElementById('copyButton').style.display = 'inline-block';
+                } else if (data.status === 'error') {
+                    alert('Project processed with issue, please try again! Message: ' + data.message);
+                } else {
+                    alert('Project processed with issue, please try again!');
+                }
+            })
+            .catch(error => {
+                console.error('Error processing project:', error);
+                alert('An error occurred while processing the project. Please try again.');
+            })
+            .finally(() => {
+                processingMessage.style.display = 'none';
+                spinner.style.display = 'none';
+                submitButton.disabled = false;
+                submitButton.style.display = 'inline-block';
+                document.getElementById('projectID').disabled = false;
+                document.getElementById('startDatePicker').disabled = false;
+                document.getElementById('endDatePicker').disabled = false;
+            });
+        }
+
+        function copyToClipboard() {
+            const textarea = document.getElementById('websiteData');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999); // For mobile devices
+            navigator.clipboard.writeText(textarea.value);
+            alert("Copied the text: " + textarea.value);
+        }
+    </script>
+</body>
+</html>

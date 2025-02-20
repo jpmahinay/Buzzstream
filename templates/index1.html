@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Data Fetcher</title>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #processingMessage {
+            display: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Data Fetcher</h1>
+    <p>Select a project and date range to fetch data and send it to BigQuery.</p>
+
+    <div class="form-group">
+        <label for="startDatePicker">Start Date:</label>
+        <input type="text" id="startDatePicker">
+    </div>
+
+    <div class="form-group">
+        <label for="endDatePicker">End Date:</label>
+        <input type="text" id="endDatePicker">
+    </div>
+
+    <div class="form-group">
+        <label for="projectID">Select Project:</label>
+        <select id="projectID" disabled>
+            <option>Loading projects...</option>
+        </select>
+    </div>
+
+    <button id="submitButton" onclick="submitForm()">Fetch Data</button>
+    <p id="processingMessage">Processing... Please wait.</p>
+
+    <script>
+        $(function() {
+            $("#startDatePicker, #endDatePicker").datepicker();
+            loadProjects();
+        });
+
+        function loadProjects() {
+            fetch('/projects')
+                .then(response => response.json())
+                .then(data => {
+                    let projectSelect = document.getElementById('projectID');
+                    projectSelect.innerHTML = '';
+                    data.forEach(project => {
+                        let option = document.createElement('option');
+                        option.value = project.id;
+                        option.textContent = project.cleanedName;
+                        projectSelect.appendChild(option);
+                    });
+                    projectSelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error loading projects:', error);
+                    alert('Failed to load projects.');
+                });
+        }
+
+        function submitForm() {
+            let projectDropdown = document.getElementById('projectID');
+            let projectId = projectDropdown.value;
+            let projectName = projectDropdown.options[projectDropdown.selectedIndex].textContent;
+            let startDate = new Date(document.getElementById('startDatePicker').value).getTime();
+            let endDate = new Date(document.getElementById('endDatePicker').value).getTime();
+
+            if (!projectId || isNaN(startDate) || isNaN(endDate)) {
+                alert('Please select a valid project and date range.');
+                return;
+            }
+
+            document.getElementById('processingMessage').style.display = 'block';
+
+            fetch('/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId: projectId,
+                    projectName: projectName,
+                    startDate: startDate,
+                    endDate: endDate
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('processingMessage').style.display = 'none';
+                if (data.status === "success") {
+                    alert('Data successfully inserted into BigQuery!');
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                document.getElementById('processingMessage').style.display = 'none';
+                console.error('Error processing project:', error);
+                alert('An error occurred while processing.');
+            });
+        }
+    </script>
+</body>
+</html>
